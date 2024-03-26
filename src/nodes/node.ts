@@ -1,29 +1,26 @@
+// Import necessary modules
 import bodyParser from "body-parser";
-import express, { Request, Response } from 'express';
+import express from "express";
 import { BASE_NODE_PORT } from "../config";
 import { NodeState, Value } from "../types";
 import { delay } from "../utils";
-import http from "http";
-import { ErrorRequestHandler } from "express";
 
-
+// Define the node function
 export async function node(
-  nodeId: number, // the ID of the node
-  N: number, // total number of nodes in the network
-  F: number, // number of faulty nodes in the network
-  initialValue: Value, // initial value of the node
-  isFaulty: boolean, // true if the node is faulty, false otherwise
-  nodesAreReady: () => boolean, // used to know if all nodes are ready to receive requests
-  setNodeIsReady: (index: number) => void // this should be called when the node is started and ready to receive requests
+    nodeId: number,
+    N: number,
+    F: number,
+    initialValue: Value,
+    isFaulty: boolean,
+    nodesAreReady: () => boolean,
+    setNodeIsReady: (index: number) => void
 ) {
+  // Initialize express and middleware
   const node = express();
   node.use(express.json());
   node.use(bodyParser.json());
 
-  // TODO implement this
-  // this route allows retrieving the current status of the node
-  // node.get("/status", (req, res) => {});
-  
+  // Initialize node state and data structures
   let currentNodeState: NodeState = {
     killed: false,
     x: null,
@@ -33,39 +30,23 @@ export async function node(
   let proposals: Map<number, Value[]> = new Map();
   let votes: Map<number, Value[]> = new Map();
 
+  // Define route to get node status
   node.get("/status", (req, res) => {
-    if (isFaulty) {
-      res.status(500).send("faulty");
-    } else {
-      res.status(200).send("live");
-    }
-  });
-  node.get("/getState", (req, res) => {
-    if (isFaulty) {
-      res.json({
-        killed: false, // Assuming the 'killed' flag is managed elsewhere in your code
-        x: null,
-        decided: null,
-        k: null
-      });
-    } else {
-      // Assuming you have a way to access the current state
-      // You might need to implement logic to manage the current state
-      res.json({
-        killed: false, // or the actual state
-        x: initialValue, // or the current consensus value
-        decided: false, // or the actual state
-        k: 0 // or the current step
-      });
-    }
+    res.status(isFaulty ? 500 : 200).send(isFaulty ? "faulty" : "live");
   });
 
-  //get state of current node
+  // Define route to stop the node
+  node.get("/stop", (req, res) => {
+    currentNodeState.killed = true;
+    res.status(200).send("killed");
+  });
+
+  // Define route to get the current state of a node
   node.get("/getState", (req, res) => {
     res.status(200).send(currentNodeState);
   });
 
-//Start concensus algorithm
+  // Define route to start the consensus algorithm
   node.get("/start", async (req, res) => {
     // Wait until all nodes are ready
     while (!nodesAreReady()) {
@@ -90,14 +71,8 @@ export async function node(
 
     res.status(200).send("Consensus algorithm started.");
   });
-//stop node
-  node.get("/stop", (req, res) => {
-    currentNodeState.killed = true;
-    res.status(200).send("killed");
-  });
-    // TODO implement this
-  // this route allows the node to receive messages from other nodes
-  // node.post("/message", (req, res) => {});
+
+  // Define route to receive messages
   node.post("/message", async (req, res) => {
     let { k, x, messageType } = req.body;
     if (!isFaulty && !currentNodeState.killed) {
@@ -172,45 +147,9 @@ export async function node(
     res.status(200).send("Message received and processed.");
   });
 
-  
-  function processVote(message: any) {
-    // Process the vote here
-    console.log("Received vote:", message);
-  }
-  
-  function processProposal(message: any) {
-    // Process the proposal here
-    console.log("Received proposal:", message);
-  }
-  function handleMessage(message: any) {
-    // Process the message here
-    console.log("Received message:", message);
-
-    if (message.type === 'vote') {
-      processVote(message);
-    } else if (message.type === 'proposal') {
-      processProposal(message);
-    }
-  }
-  // TODO implement this
-  // this route is used to start the consensus algorithm
-  // node.get("/start", async (req, res) => {});
-
-  // TODO implement this
-  // this route is used to stop the consensus algorithm
-  // node.get("/stop", async (req, res) => {});
-
-  // TODO implement this
-  // get the current state of a node
-  // node.get("/getState", (req, res) => {});
-
-  // start the server
+  // Start the server
   const server = node.listen(BASE_NODE_PORT + nodeId, async () => {
-    console.log(
-      `Node ${nodeId} is listening on port ${BASE_NODE_PORT + nodeId}`
-    );
-
-    // the node is ready
+    console.log(`Node ${nodeId} is listening on port ${BASE_NODE_PORT + nodeId}`);
     setNodeIsReady(nodeId);
   });
 
